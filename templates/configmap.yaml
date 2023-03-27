@@ -1,0 +1,20 @@
+{{- if .Values.configFiles.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "+( .AppName ).fullname" . }}
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+data:
+  {{ range $k,$v := .Values.configFiles.files -}}
+  {{- if eq "string" (printf "%T" $v ) -}}
+  {{- $k | nindent 2 }}: |-
+    {{- $v | nindent 4 -}}
+  {{- else -}}
+  {{- $k | nindent 2 }}: |-
+    {{- toYaml $v | nindent 4 }}
+  {{- end }}
+  {{- end }}
+{{- end }}

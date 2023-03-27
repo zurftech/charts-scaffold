@@ -1,8 +1,16 @@
 {{/*
 Expand the name of the chart.
 */}}
-{{- define "@@APP_NAME@@.name" -}}
+{{- define "+( .AppName ).name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Expand the job names in the chart.
+*/}}
+{{- define "+( .AppName ).jobname" -}}
+{{- $name := default .Chart.Name .Values.nameOverride }}
+{{- printf "%s-jobs" $name | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
@@ -10,7 +18,7 @@ Create a default fully qualified app name.
 We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
 If release name contains chart name it will be used as a full name.
 */}}
-{{- define "@@APP_NAME@@.fullname" -}}
+{{- define "+( .AppName ).fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -26,16 +34,29 @@ If release name contains chart name it will be used as a full name.
 {{/*
 Create chart name and version as used by the chart label.
 */}}
-{{- define "@@APP_NAME@@.chart" -}}
+{{- define "+( .AppName ).chart" -}}
 {{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
 {{/*
 Common labels
 */}}
-{{- define "@@APP_NAME@@.labels" -}}
-helm.sh/chart: {{ include "@@APP_NAME@@.chart" . }}
-{{ include "@@APP_NAME@@.selectorLabels" . }}
+{{- define "+( .AppName ).labels" -}}
+helm.sh/chart: {{ include "+( .AppName ).chart" . }}
+{{ include "+( .AppName ).selectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+Common labels
+*/}}
+{{- define "+( .AppName ).joblabels" -}}
+helm.sh/chart: {{ include "+( .AppName ).chart" . }}
+app.kubernetes.io/name: {{ include "+( .AppName ).jobname" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
 {{- if .Chart.AppVersion }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 {{- end }}
@@ -45,17 +66,17 @@ app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{/*
 Selector labels
 */}}
-{{- define "@@APP_NAME@@.selectorLabels" -}}
-app.kubernetes.io/name: {{ include "@@APP_NAME@@.name" . }}
+{{- define "+( .AppName ).selectorLabels" -}}
+app.kubernetes.io/name: {{ include "+( .AppName ).name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
 Create the name of the service account to use
 */}}
-{{- define "@@APP_NAME@@.serviceAccountName" -}}
+{{- define "+( .AppName ).serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "@@APP_NAME@@.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "+( .AppName ).fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

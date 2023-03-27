@@ -1,10 +1,10 @@
-{{- $fullName := include "@@APP_NAME@@.fullname" . -}}
+{{- $fullName := include "+( .AppName ).fullname" . -}}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ $fullName }}
   labels:
-    {{- include "@@APP_NAME@@.labels" . | nindent 4 }}
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
   {{- if .Values.service.annotations }}
   annotations:
     {{-  toYaml .Values.service.annotations | nindent 4 }}
@@ -28,4 +28,4 @@ spec:
   {{- end }}
   {{- end }}
   selector:
-    {{- include "@@APP_NAME@@.selectorLabels" . | nindent 4 }}
+    {{- include "+( .AppName ).selectorLabels" . | nindent 4 }}

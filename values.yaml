@@ -6,11 +6,15 @@ fullnameOverride: ""
 
 replicaCount: 1
 image:
-  repository: INJECT_IMAGE_URI
+  repository: +( .ImageRepository )
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
   # tag: "v1"
- 
+
+entrypoint: {}
+  # command: ["test2"]
+  # args: ["test"]
+
 imagePullSecrets: []
 
 serviceAccount:
@@ -61,7 +65,9 @@ gateway:
   grpc: true
   ambassador_id: []
   routes: {}
+  # routes:
   #  filter:
+  #    ambassador_id: ["test2"]
   #    prefix: /route1/
   #    rewrite: /route1/
   #  stream:
@@ -112,3 +118,31 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+configFiles:
+  enabled: false
+  mountPath: /etc/app
+  files: {}
+
+
+livenessProbe: {}
+  # httpGet:
+  #   path: /healthz
+  #   port: liveness-port
+  # failureThreshold: 1
+  # periodSeconds: 10
+
+startupProbe: {}
+  # httpGet:
+  #   path: /healthz
+  #   port: liveness-port
+  # failureThreshold: 30
+  # periodSeconds: 10
+
+readinessProbe: {}
+  # exec:
+  #   command:
+  #   - cat
+  #   - /tmp/healthy
+  # initialDelaySeconds: 5
+  # periodSeconds: 5

@@ -1,0 +1,25 @@
+{{- if .Values.gateway.enabled }}
+{{- $fullName := include "@@APP_NAME@@.fullname" . -}}
+{{- range $k,$v := .Values.gateway.routes }}
+{{- $firstPorts := dict }}
+{{- if $.Values.service.ports }}
+{{- $firstPorts = mustFirst $.Values.service.ports }}
+{{- end }}
+{{- $defPort := coalesce $.Values.service.port $firstPorts.port }}
+{{- $port := coalesce $v.port $.Values.gateway.port $.Values.service.port $firstPorts.port $defPort }}
+{{- $servicehost :=   cat $fullName ":" $port | nospace }}
+{{- $def := dict "ambassador_id" $.Values.gateway.ambassador_id "service" $servicehost "host" $.Values.gateway.host  "timeout_ms" $.Values.gateway.timeout_ms "idle_timeout_ms" $.Values.gateway.idle_timeout_ms "grpc" $.Values.gateway.grpc }}
+{{- $n := mustDeepCopy $def }}
+{{- $newdict := mustDeepCopy $v | mustMergeOverwrite $n}}
+{{- $useDict := omit $newdict "port"}}
+---
+apiVersion: getambassador.io/v2
+kind:  Mapping
+metadata:
+  name:  {{ $fullName }}-{{ $k }}
+  labels:
+    {{- include "@@APP_NAME@@.labels" $ | nindent 4 }}
+spec:
+  {{- toYaml $useDict | nindent 2 }}
+{{- end}}
+{{- end}}

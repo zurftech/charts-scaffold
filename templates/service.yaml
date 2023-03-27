@@ -1,0 +1,31 @@
+{{- $fullName := include "@@APP_NAME@@.fullname" . -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $fullName }}
+  labels:
+    {{- include "@@APP_NAME@@.labels" . | nindent 4 }}
+  {{- if .Values.service.annotations }}
+  annotations:
+    {{-  toYaml .Values.service.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+  {{- if .Values.service.port }}
+    - port: {{ .Values.service.port }}
+      targetPort: {{.Values.service.appPort}}
+      protocol: TCP
+      name: {{ .Values.service.portName | default "http" }}
+  {{- else if .Values.service.ports }}
+  {{- range $k, $v := .Values.service.ports }}
+    {{- if and $v.port $v.name }}
+    - port: {{ $v.port }}
+      targetPort: {{ $v.appPort}}
+      protocol: TCP
+      name: {{ $v.name }}
+    {{- end }}
+  {{- end }}
+  {{- end }}
+  selector:
+    {{- include "@@APP_NAME@@.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,114 @@
+# Default values for central-framework.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+image:
+  repository: INJECT_IMAGE_URI
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  # tag: "v1"
+ 
+imagePullSecrets: []
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: ClusterIP
+  annotations: {}
+  # portName: test
+  # port: 8080
+  # appPort: 8000
+  ports:
+  - name: http
+    port: 80
+    appPort: 8050
+
+migrations:
+  enabled: false
+  # image: otherimages
+  # command: ["app"]
+  args: ["migrate", "up"]
+  
+#Ambassador gateway mappings
+gateway:
+  enabled: false
+  host: api.example.com
+  timeout_ms: 0
+  idle_timeout_ms: 0
+  grpc: true
+  ambassador_id: []
+  routes: {}
+  #  filter:
+  #    prefix: /route1/
+  #    rewrite: /route1/
+  #  stream:
+  #    port:
+  #    rewrite: /route2/
+  #    prefix: /route2/
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+generatedEnvPrefix: ""
+env: {}
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

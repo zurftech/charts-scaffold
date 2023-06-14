@@ -11,7 +11,7 @@
 {{- $def := dict "ambassador_id" $.Values.gateway.ambassador_id "service" $servicehost "host" $.Values.gateway.host  "timeout_ms" $.Values.gateway.timeout_ms "idle_timeout_ms" $.Values.gateway.idle_timeout_ms "grpc" $.Values.gateway.grpc }}
 {{- $n := mustDeepCopy $def }}
 {{- $newdict := mustDeepCopy $v | mustMergeOverwrite $n}}
-{{- if .Values.gateway.websocket_enabled }}
+{{- if or .Values.gateway.websocket_enabled false }}
 {{- $allowedUpgradeList := list "websocket" }}
 {{- $_ := set $newdict "allow_upgrade" $allowedUpgradeList }}
 {{- end }}

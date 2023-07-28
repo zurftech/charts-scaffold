@@ -1,0 +1,5 @@
+{{- if .Values.hook -}}
+{{- if .Values.hook.batchjob -}}
+{{- .Values.hook.batchjob -}}
+{{- end -}}
+{{- end -}}

@@ -94,6 +94,10 @@ spec:
             mountPath: {{ .Values.configFiles.mountPath }}
             readOnly: true
           {{- end }}
+          {{- if .Values.persistence.enabled }}
+          - name: persistence
+            mountPath: {{ .Values.persistence.mountPath }}
+          {{- end }}          
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -111,4 +115,9 @@ spec:
       - name: configfiles
         configMap:
           name: {{ include "+( .AppName ).fullname" . }}
+      {{- end }}
+      {{- if .Values.persistence.enabled }}
+      - name: persistence
+        persistentVolumeClaim:
+          claimName: {{  .Values.persistence.pvcName }}
       {{- end }}

@@ -69,8 +69,10 @@ Selector labels
 {{- define "+( .AppName ).selectorLabels" -}}
 app.kubernetes.io/name: {{ include "+( .AppName ).name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+/*
 app.kubernetes.io/app: {{ include "+( .AppName ).name" . }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+*/
 {{- end }}
 
 {{/*

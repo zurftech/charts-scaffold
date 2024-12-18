@@ -10,6 +10,7 @@ metadata:
     "helm.sh/hook-weight": "5"
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
+  backoffLimit: 1
   template:
     metadata:
       name: "{{ .Release.Name }}-migration"

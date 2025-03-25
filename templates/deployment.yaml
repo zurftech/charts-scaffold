@@ -36,6 +36,11 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.secretEnv.enabled }}
+          envFrom:
+          - secretRef:
+              name: {{ .Values.secretEnv.secretName | quote }}
+          {{- end }}
           {{- if .Values.entrypoint.command }}
           command: 
           {{- toYaml .Values.entrypoint.command  | nindent 10 }}

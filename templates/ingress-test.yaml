@@ -17,7 +17,7 @@
 {{- /* Omit the global konghq.com/rewrite to avoid duplication below */ -}}
 {{- $globalAnnots := omit $.Values.ingress.annotations "konghq.com/rewrite" -}}
 
-{{- range $hostIdx, $hostEntry := .Values.ingress.hosts }}
+{{- range $hostIdx, $hostEntry := .Values.ingressTest.hosts }}
   {{- range $pathIdx, $path := $hostEntry.paths }}
     {{- $trimmedPath := trimSuffix "/" $path.path }}
     {{- $pathSuffix := regexFind "[^/]+$" $trimmedPath }}

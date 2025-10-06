@@ -15,6 +15,26 @@ entrypoint: {}
   # command: ["test2"]
   # args: ["test"]
 
+# multiIngress:
+#   - className: kong
+#     annotations:
+#       konghq.com/strip-path: "true"
+#     hosts:
+#       - host: app1.example.com
+#         paths:
+#           - path: /foo
+#             pathType: Prefix
+
+#   - className: nginx
+#     annotations:
+#       nginx.ingress.kubernetes.io/rewrite-target: /
+#     hosts:
+#       - host: app2.example.com
+#         paths:
+#           - path: /
+#             pathType: Prefix
+
+
 imagePullSecrets: []
 
 serviceAccount:

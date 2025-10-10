@@ -46,10 +46,10 @@ spec:
               service:
                 name: {{ include "+( .AppName ).fullname" $ }}
                 port:
-                  number: {{ $.Values.service.port }}
+                  number: {{ (index $.Values.service.ports 0).port }}
               {{- else }}
               serviceName: {{ include "+( .AppName ).fullname" $ }}
-              servicePort: {{ $.Values.service.port }}
+              servicePort: {{ (index $.Values.service.ports 0).port }}
               {{- end }}
           {{- end }}
     {{- end }}

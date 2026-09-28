@@ -170,3 +170,25 @@ readinessProbe: {}
 
 persistence:
   enabled: false
+
+# CronJobs (off by default: an empty list renders nothing). Each entry reuses the Deployment's image, service
+# account, security contexts, secretEnv, env, configFiles / persistence mounts and scheduling constraints.
+cronJobs: []
+#  - name: nightly-report              # CronJob name: <fullname>-<name>, max 52 characters
+#    schedule: "30 20 * * *"           # required; UTC unless timeZone is set
+#    timeZone: ""                      # e.g. Asia/Kolkata (Kubernetes >= 1.27)
+#    args: ["report", "--nightly"]     # command / args like entrypoint
+#    command: []
+#    image: ""                         # default: the app image and tag
+#    env: {}                           # merged over .Values.env, entry wins
+#    resources: {}                     # default: .Values.resources
+#    podAnnotations: {}                # default: .Values.podAnnotations
+#    concurrencyPolicy: Forbid         # Allow | Forbid | Replace
+#    suspend: false
+#    startingDeadlineSeconds: 300
+#    successfulJobsHistoryLimit: 3
+#    failedJobsHistoryLimit: 3
+#    backoffLimit: 0
+#    activeDeadlineSeconds: 1800
+#    ttlSecondsAfterFinished: 86400
+#    restartPolicy: Never              # Never | OnFailure

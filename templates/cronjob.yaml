@@ -1,0 +1,119 @@
+{{- /*
+CronJobs, off by default: nothing renders unless .Values.cronJobs lists at least one entry, so existing charts are
+unchanged. Each entry runs the app image (or entry.image) with the pod settings of the Deployment: service
+account, pull secrets, pod / container security context, secretEnv, env (entry.env wins per key), configFiles and
+persistence mounts, nodeSelector, affinity, tolerations. Pods carry the job labels, never the Deployment's
+selector labels, so the Service never routes traffic to a job pod.
+*/ -}}
+{{- range $job := .Values.cronJobs }}
+{{- $envConfig := $.Values.secretEnv | default dict }}
+{{- $env := merge (deepCopy ($job.env | default dict)) (deepCopy ($.Values.env | default dict)) }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ printf "%s-%s" (include "+( .AppName ).fullname" $) $job.name | trunc 52 | trimSuffix "-" }}
+  labels:
+    {{- include "+( .AppName ).labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $job.name | quote }}
+spec:
+  schedule: {{ required "cronJobs[].schedule is required" $job.schedule | quote }}
+  {{- with $job.timeZone }}
+  timeZone: {{ . | quote }}
+  {{- end }}
+  concurrencyPolicy: {{ $job.concurrencyPolicy | default "Forbid" }}
+  suspend: {{ $job.suspend | default false }}
+  {{- with $job.startingDeadlineSeconds }}
+  startingDeadlineSeconds: {{ . }}
+  {{- end }}
+  successfulJobsHistoryLimit: {{ hasKey $job "successfulJobsHistoryLimit" | ternary $job.successfulJobsHistoryLimit 3 }}
+  failedJobsHistoryLimit: {{ hasKey $job "failedJobsHistoryLimit" | ternary $job.failedJobsHistoryLimit 3 }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ hasKey $job "backoffLimit" | ternary $job.backoffLimit 0 }}
+      {{- with $job.activeDeadlineSeconds }}
+      activeDeadlineSeconds: {{ . }}
+      {{- end }}
+      {{- with $job.ttlSecondsAfterFinished }}
+      ttlSecondsAfterFinished: {{ . }}
+      {{- end }}
+      template:
+        metadata:
+          {{- with ($job.podAnnotations | default $.Values.podAnnotations) }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          labels:
+            {{- include "+( .AppName ).joblabels" $ | nindent 12 }}
+            app.kubernetes.io/component: {{ $job.name | quote }}
+        spec:
+          restartPolicy: {{ $job.restartPolicy | default "Never" }}
+          {{- with $.Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "+( .AppName ).serviceAccountName" $ }}
+          securityContext:
+            {{- toYaml $.Values.podSecurityContext | nindent 12 }}
+          containers:
+            - name: {{ $job.name }}
+              securityContext:
+                {{- toYaml $.Values.securityContext | nindent 16 }}
+              image: "{{ $job.image | default (printf "%s:%s" $.Values.image.repository ($.Values.image.tag | default $.Chart.AppVersion)) }}"
+              imagePullPolicy: {{ $.Values.image.pullPolicy }}
+              {{- if $envConfig.enabled | default false }}
+              envFrom:
+              - secretRef:
+                  name: {{ $envConfig.secretName | quote }}
+              {{- end }}
+              {{- with $job.command }}
+              command:
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+              {{- with $job.args }}
+              args:
+              {{- toYaml . | nindent 14 }}
+              {{- end }}
+              {{- if $env }}
+              env:
+              {{- range $k, $v := $env }}
+              - name: {{ $k }}
+                value: "{{ $v }}"
+              {{- end }}
+              {{- end }}
+              resources:
+                {{- toYaml ($job.resources | default $.Values.resources) | nindent 16 }}
+              volumeMounts:
+              {{- if $.Values.configFiles.enabled }}
+              - name: configfiles
+                mountPath: {{ $.Values.configFiles.mountPath }}
+                readOnly: true
+              {{- end }}
+              {{- if $.Values.persistence.enabled }}
+              - name: persistence
+                mountPath: {{ $.Values.persistence.mountPath }}
+              {{- end }}
+          {{- with $.Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with $.Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumes:
+          {{- if $.Values.configFiles.enabled }}
+          - name: configfiles
+            configMap:
+              name: {{ include "+( .AppName ).fullname" $ }}
+          {{- end }}
+          {{- if $.Values.persistence.enabled }}
+          - name: persistence
+            persistentVolumeClaim:
+              claimName: {{ $.Values.persistence.pvcName }}
+          {{- end }}
+{{- end }}

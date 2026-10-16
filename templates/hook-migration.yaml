@@ -1,4 +1,25 @@
 {{- if .Values.migrations.enabled }}
+{{- if .Values.configFiles.enabled }}
+{{- /*
+The migration Job runs before the release's normal resources (Helm pre-install/pre-upgrade,
+Argo CD PreSync), so it cannot mount the app ConfigMap: on a fresh install that does not exist
+yet, and on an upgrade it still holds the old config. This hook copy is created first (weight 0,
+the Job is 5) with the same data.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "+( .AppName ).fullname" . }}-migration-config
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+data:
+  {{- include "+( .AppName ).configFilesData" . | nindent 2 }}
+---
+{{- end }}
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -48,6 +69,6 @@ spec:
       {{- if .Values.configFiles.enabled }}
       - name: configfiles
         configMap:
-          name: {{ include "+( .AppName ).fullname" . }}
+          name: {{ include "+( .AppName ).fullname" . }}-migration-config
       {{- end }}
 {{- end }}

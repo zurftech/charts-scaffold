@@ -23,10 +23,9 @@ spec:
       {{- $podAnnotations := deepCopy (.Values.podAnnotations | default dict) }}
       {{- if .Values.configFiles.enabled }}
       {{- /*
-        The ConfigMap is a pre-install,pre-upgrade hook. Argo CD leaves hooks out of the
-        diff, so a config-only change keeps the app Synced, auto-sync never runs and the
-        ConfigMap is never re-applied. Hashing it into the pod template makes the
-        Deployment differ, which triggers the sync (and the hook) and rolls the pods.
+        Hashing the ConfigMap into the pod template rolls the pods when config changes,
+        so they never keep running on the config they started with. It also makes the
+        Deployment differ, which re-runs the migration hook on config-only changes.
       */}}
       {{- $_ := set $podAnnotations "checksum/config" (include (print $.Template.BasePath "/configmap.yaml") . | sha256sum) }}
       {{- end }}

@@ -81,3 +81,19 @@ Create the name of the service account to use
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}
 {{- end }}
+
+{{/*
+The data block of the configFiles ConfigMap. configmap.yaml and the migration hook's copy in
+hook-migration.yaml both render it, so the two never drift apart.
+*/}}
+{{- define "+( .AppName ).configFilesData" -}}
+{{- range $k,$v := .Values.configFiles.files -}}
+{{- if eq "string" (printf "%T" $v ) -}}
+{{- $k | nindent 0 }}: |-
+  {{- $v | nindent 2 -}}
+{{- else -}}
+{{- $k | nindent 0 }}: |-
+  {{- toYaml $v | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}

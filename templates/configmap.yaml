@@ -1,20 +1,17 @@
 {{- if .Values.configFiles.enabled }}
+{{- /*
+A normal resource, not a Helm hook, so Argo CD diffs it: a config-only change makes the app
+OutOfSync and auto-sync applies it. As a hook it was left out of the diff, never re-applied on
+config-only changes, and deleted and re-created on every sync (BeforeHookCreation), which once
+left the app with no ConfigMap at all. The migration Job reads its own hook copy, see
+hook-migration.yaml.
+*/}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: {{ include "+( .AppName ).fullname" . }}
   labels:
     {{- include "+( .AppName ).labels" . | nindent 4 }}
-  annotations:
-    "helm.sh/hook": pre-install,pre-upgrade
 data:
-  {{ range $k,$v := .Values.configFiles.files -}}
-  {{- if eq "string" (printf "%T" $v ) -}}
-  {{- $k | nindent 2 }}: |-
-    {{- $v | nindent 4 -}}
-  {{- else -}}
-  {{- $k | nindent 2 }}: |-
-    {{- toYaml $v | nindent 4 }}
-  {{- end }}
-  {{- end }}
+  {{- include "+( .AppName ).configFilesData" . | nindent 2 }}
 {{- end }}

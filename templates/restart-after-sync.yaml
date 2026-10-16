@@ -1,0 +1,109 @@
+{{- /*
+restartAfterSync, off by default. Restarts the listed Deployments of the release namespace once this
+release has synced and is Healthy. The RBAC objects are normal resources, so they exist before the hook
+runs; only the Job is a hook (Argo CD PostSync, Helm post-install/post-upgrade). The image is distroless
+kubectl, so there is no shell: an init container restarts every Deployment in one call, then one container
+per Deployment waits for its rollout. The Job fails, and so does the sync, if a rollout does not finish
+within timeout.
+*/ -}}
+{{- $cfg := .Values.restartAfterSync | default dict }}
+{{- if and $cfg.enabled $cfg.deployments }}
+{{- $name := printf "%s-restart-after-sync" (include "+( .AppName ).fullname" .) | trunc 63 | trimSuffix "-" }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+rules:
+  # restart patches the pod template; status reads the Deployment through a name-scoped list/watch
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames:
+      {{- toYaml $cfg.deployments | nindent 6 }}
+    verbs: ["get", "list", "watch", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        {{- include "+( .AppName ).joblabels" . | nindent 8 }}
+      annotations:
+        linkerd.io/inject: disabled
+    spec:
+      restartPolicy: Never
+      serviceAccountName: {{ $name }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: restart
+          image: {{ $cfg.image | quote }}
+          args:
+            - rollout
+            - restart
+            - deployment
+            {{- range $cfg.deployments }}
+            - {{ . | quote }}
+            {{- end }}
+          {{- include "+( .AppName ).restartAfterSyncContainer" $cfg | nindent 10 }}
+      containers:
+        {{- range $cfg.deployments }}
+        - name: {{ printf "wait-%s" . | trunc 63 | trimSuffix "-" }}
+          image: {{ $cfg.image | quote }}
+          args:
+            - rollout
+            - status
+            - {{ printf "deployment/%s" . | quote }}
+            - {{ printf "--timeout=%s" ($cfg.timeout | default "5m") | quote }}
+          {{- include "+( .AppName ).restartAfterSyncContainer" $cfg | nindent 10 }}
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}

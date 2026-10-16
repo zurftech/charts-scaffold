@@ -70,6 +70,20 @@ service:
     port: 80
     appPort: 8050
 
+# Restart other Deployments in this namespace after every successful sync. Argo CD runs it as a
+# PostSync hook, after this app's resources are Healthy (new pods serving); plain Helm runs it as a
+# post-install / post-upgrade hook. Use it for a client that reads this app only at startup, such as
+# a GraphQL router that composes its supergraph by introspecting this app's subgraphs.
+restartAfterSync:
+  enabled: false
+  # Deployment names in the release namespace, e.g. [apollo-router]
+  deployments: []
+  # Needs only the kubectl binary (it is the entrypoint); keep it within one minor of the cluster.
+  image: registry.k8s.io/kubectl:v1.36.4
+  # How long to wait for each restarted Deployment to finish rolling out. A timeout fails the sync.
+  timeout: 5m
+  resources: {}
+
 migrations:
   enabled: false
   # image: otherimages

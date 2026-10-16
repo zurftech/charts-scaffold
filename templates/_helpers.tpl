@@ -97,3 +97,25 @@ hook-migration.yaml both render it, so the two never drift apart.
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Container settings shared by the restartAfterSync init container and wait containers. kubectl writes
+its discovery cache under HOME, so HOME points at a writable emptyDir.
+*/}}
+{{- define "+( .AppName ).restartAfterSyncContainer" -}}
+env:
+  - name: HOME
+    value: /tmp
+volumeMounts:
+  - name: tmp
+    mountPath: /tmp
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+{{- with .resources }}
+resources:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}

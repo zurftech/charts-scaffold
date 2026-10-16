@@ -19,6 +19,27 @@ A custom `hook.job` that runs as a pre-install/pre-upgrade hook must not mount `
 install that ConfigMap does not exist yet. Mount `<fullname>-migration-config` instead, with
 `migrations.enabled` on.
 
+## restartAfterSync
+
+Off by default. Restarts other Deployments in the release namespace after every successful sync. Use it for a
+client that reads this app only at startup: for example apollo-router, which composes its supergraph by
+introspecting the subgraphs once, when its pod starts.
+
+```yaml
+restartAfterSync:
+  enabled: true
+  deployments: [apollo-router]
+  # image: registry.k8s.io/kubectl:v1.36.4   # keep within one minor of the cluster
+  # timeout: 5m                              # per Deployment; a timeout fails the sync
+```
+
+The Job is an Argo CD PostSync hook (Helm post-install/post-upgrade), so it runs only once this release's
+resources are Healthy, which means the new pods are already serving. It renders a ServiceAccount, a Role that can
+only get, list, watch and patch the listed Deployments, and a RoleBinding, all as normal resources. An init
+container runs `kubectl rollout restart` and one container per Deployment waits on `kubectl rollout status`.
+
+It runs on every sync of this app, including config-only ones.
+
 ## CronJobs
 
 Off by default: `cronJobs: []` renders nothing, so existing apps are unchanged. Each entry becomes a

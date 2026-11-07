@@ -19,6 +19,13 @@ entrypoint: {}
 #   - className: kong
 #     annotations:
 #       konghq.com/strip-path: "true"
+#     # Optional, kong class only: one KongPlugin per key, named <fullname>-<index>-<key>,
+#     # attached to this Ingress only. See README "multiIngress kongPlugins".
+#     kongPlugins:
+#       rate-limit:
+#         plugin: rate-limiting
+#         config:
+#           minute: 5000      # per client IP; replaces the gateway's global limit here
 #     hosts:
 #       - host: app1.example.com
 #         paths:

@@ -58,3 +58,39 @@ cronJobs:
 ```
 
 All keys are listed, commented, under `cronJobs` in `values.yaml`.
+
+## multiIngress kongPlugins
+
+Each `multiIngress` entry of class `kong` may carry `kongPlugins`, a map of Kong plugins for that Ingress
+only. Every key renders one namespaced `KongPlugin` named `<fullname>-<index>-<key>` and appends that name to
+the Ingress's `konghq.com/plugins` annotation, after any names already there. Other entries are untouched, so a
+service can set its own limit on one route and leave the rest on the gateway's defaults.
+
+```yaml
+multiIngress:
+  - className: kong
+    annotations:
+      konghq.com/strip-path: 'false'
+    kongPlugins:
+      rate-limit:
+        plugin: rate-limiting
+        config:
+          minute: 12000
+    hosts:
+      - host: api.example.com
+        paths:
+          - path: /svc/mcp
+            pathType: Prefix
+```
+
+`config` is passed to Kong as written. For `plugin: rate-limiting` only, the chart fills in `limit_by: ip`,
+`policy: local`, `fault_tolerant: true` and `hide_client_headers: false` wherever the entry does not set them.
+
+A plugin attached to a route replaces a global plugin of the same type for that route. Each gateway runs a
+global `rate-limiting` (kong-deployment), so a `rate-limiting` entry here is that route's whole limit: it can
+be higher or lower than the global one. `policy: local` counts per Kong pod, so the real ceiling per IP is
+`minute` x Kong replicas; a gateway with a Redis counter store (kong-deployment cluster values) can be used
+with `policy: redis` and its `redis_host`.
+
+A key set to `null` renders nothing. Charts built before this feature ignore `kongPlugins`, so the Ingress
+keeps working, just without the plugin.

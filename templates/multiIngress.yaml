@@ -1,5 +1,24 @@
 {{- if .Values.multiIngress }}
 {{- range $idx, $ing := .Values.multiIngress }}
+{{- $ingName := printf "%s-%d" (include "+( .AppName ).fullname" $) $idx }}
+{{- /* kongPlugins: one KongPlugin per entry, named <ingress>-<key>, attached to
+       this Ingress only by appending it to konghq.com/plugins. See README. */ -}}
+{{- $annotations := deepCopy ($ing.annotations | default dict) }}
+{{- $pluginNames := list }}
+{{- range $key, $p := ($ing.kongPlugins | default dict) }}
+{{- if $p }}
+{{- $pluginNames = append $pluginNames (printf "%s-%s" $ingName $key) }}
+{{- end }}
+{{- end }}
+{{- if $pluginNames }}
+{{- $existing := list }}
+{{- range splitList "," (index $annotations "konghq.com/plugins" | default "") }}
+{{- if trim . }}
+{{- $existing = append $existing (trim .) }}
+{{- end }}
+{{- end }}
+{{- $_ := set $annotations "konghq.com/plugins" (join "," (concat $existing $pluginNames)) }}
+{{- end }}
 ---
 {{- if semverCompare ">=1.19-0" $.Capabilities.KubeVersion.GitVersion }}
 apiVersion: networking.k8s.io/v1
@@ -10,10 +29,10 @@ apiVersion: extensions/v1beta1
 {{- end }}
 kind: Ingress
 metadata:
-  name: {{ include "+( .AppName ).fullname" $ }}-{{ $idx }}
+  name: {{ $ingName }}
   labels:
     {{- include "+( .AppName ).labels" $ | nindent 4 }}
-  {{- with $ing.annotations }}
+  {{- with $annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
   {{- end }}
@@ -53,5 +72,31 @@ spec:
               {{- end }}
           {{- end }}
     {{- end }}
+{{- range $key, $p := ($ing.kongPlugins | default dict) }}
+{{- if $p }}
+{{- $config := deepCopy ($p.config | default dict) }}
+{{- if eq $p.plugin "rate-limiting" }}
+{{- /* Count per client IP and fail open, unless the entry says otherwise.
+       Explicit keys, not sprig merge: merge would replace a false the entry set. */ -}}
+{{- range $k, $v := dict "limit_by" "ip" "policy" "local" "fault_tolerant" true "hide_client_headers" false }}
+{{- if not (hasKey $config $k) }}
+{{- $_ := set $config $k $v }}
+{{- end }}
+{{- end }}
+{{- end }}
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: {{ $ingName }}-{{ $key }}
+  labels:
+    {{- include "+( .AppName ).labels" $ | nindent 4 }}
+plugin: {{ required (printf "multiIngress[%d].kongPlugins.%s.plugin is required" $idx $key) $p.plugin }}
+{{- with $config }}
+config:
+  {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+{{- end }}
 {{- end }}
 {{- end }}

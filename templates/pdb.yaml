@@ -1,0 +1,25 @@
+{{- /*
+podDisruptionBudget, off by default. Covers the app's Deployment (its selector labels, so with component
+set the worker is not included). Neither minAvailable nor maxUnavailable set: minAvailable 1.
+*/ -}}
+{{- $pdb := .Values.podDisruptionBudget | default dict }}
+{{- if $pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "+( .AppName ).fullname" . }}
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+spec:
+  {{- if hasKey $pdb "maxUnavailable" }}
+  maxUnavailable: {{ $pdb.maxUnavailable }}
+  {{- else }}
+  minAvailable: {{ hasKey $pdb "minAvailable" | ternary $pdb.minAvailable 1 }}
+  {{- end }}
+  {{- with $pdb.unhealthyPodEvictionPolicy }}
+  unhealthyPodEvictionPolicy: {{ . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "+( .AppName ).selectorLabels" . | nindent 6 }}
+{{- end }}

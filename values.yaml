@@ -96,6 +96,9 @@ migrations:
   # image: otherimages
   # command: ["app"]
   args: ["migrate", "up"]
+  # Pass the app's envFrom secrets (secretEnv, externalSecret) to the migration Job. Default: true when
+  # externalSecret is enabled (the Job then reads a hook copy of it, <fullname>-migration), false otherwise.
+  # secretEnv: true
   
 #Ambassador gateway mappings
 gateway:
@@ -191,6 +194,72 @@ readinessProbe: {}
 
 persistence:
   enabled: false
+
+# ---------------------------------------------------------------------------------------------------------
+# Everything below is off or empty by default and renders nothing until set, so a chart that does not use
+# it renders exactly as before. README.md has a section per feature.
+
+# Secrets from a secret store (external-secrets.io/v1 ExternalSecret), passed to every app container with
+# envFrom next to secretEnv. On euphoria: a ClusterSecretStore over AWS Secrets Manager, keys
+# euphoria/<namespace>/<app>.
+externalSecret:
+  enabled: false
+  # name: ""                          # ExternalSecret and Secret name; default <fullname>
+  # storeName: aws-secretsmanager     # required
+  # storeKind: ClusterSecretStore
+  # remoteKey: euphoria/<namespace>/<app>   # JSON secret; alone: every top-level key becomes a Secret key
+  # keys: []                          # with remoteKey: copy only these keys
+  # data: []                          # extra entries as written, e.g. a key from another secret
+  # refreshInterval: 1h
+  # creationPolicy: Owner
+  # deletionPolicy: ""                # e.g. Retain
+  # envFrom: true                     # false: create the Secret, do not pass it as envFrom
+  # annotations: {}
+
+# app.kubernetes.io/component: <component> on the selector of the Deployment, Service and
+# PodDisruptionBudget, and on every label set. Required by worker. Changing it on a live app changes the
+# Deployment's selector, which Kubernetes does not allow in place.
+component: ""
+
+# A second Deployment for single-writer background work; see templates/worker.yaml for every override.
+worker:
+  enabled: false
+  # name: worker                      # Deployment <fullname>-<name>, pods component <name>
+  # replicas: 1
+  # strategy: {type: Recreate}
+  # entrypoint: {}
+  # env: {}
+  # configFiles:
+  #   files: {}
+  # resources: {}
+  # podAnnotations: {}
+
+podDisruptionBudget:
+  enabled: false
+  # minAvailable: 1
+  # maxUnavailable: 1
+  # unhealthyPodEvictionPolicy: AlwaysAllow
+
+networkPolicy:
+  enabled: false
+  # policyTypes: [Ingress]
+  # ingress: []                       # NetworkPolicy ingress rules, rendered with tpl
+  # egress: []
+
+# Pod and Deployment settings, passed through as written.
+revisionHistoryLimit: 1
+strategy: {}
+podLabels: {}
+# automountServiceAccountToken: false
+# enableServiceLinks: false
+# terminationGracePeriodSeconds: 30
+lifecycle: {}
+topologySpreadConstraints: []         # rendered with tpl
+# Containers that run before the app container, rendered with tpl, so an image can be written as
+#   image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+initContainers: []
+extraVolumes: []                      # rendered with tpl
+extraVolumeMounts: []                 # on the app container
 
 # CronJobs (off by default: an empty list renders nothing). Each entry reuses the Deployment's image, service
 # account, security contexts, secretEnv, env, configFiles / persistence mounts and scheduling constraints.

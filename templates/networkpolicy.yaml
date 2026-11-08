@@ -1,0 +1,32 @@
+{{- /*
+networkPolicy, off by default. Selects every pod of the app (worker included) and allows only the
+ingress / egress rules given, written as in a NetworkPolicy spec (rendered with tpl). policyTypes
+defaults to Ingress, plus Egress when egress rules are given.
+*/ -}}
+{{- $np := .Values.networkPolicy | default dict }}
+{{- if $np.enabled }}
+{{- $types := $np.policyTypes | default (list "Ingress") }}
+{{- if and $np.egress (not $np.policyTypes) }}
+{{- $types = append $types "Egress" }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "+( .AppName ).fullname" . }}
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "+( .AppName ).appSelectorLabels" . | nindent 6 }}
+  policyTypes:
+    {{- toYaml $types | nindent 4 }}
+  {{- with $np.ingress }}
+  ingress:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+  {{- with $np.egress }}
+  egress:
+    {{- tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+{{- end }}

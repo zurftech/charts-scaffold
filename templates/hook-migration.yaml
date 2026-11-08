@@ -1,4 +1,40 @@
 {{- if .Values.migrations.enabled }}
+{{- /*
+Secrets for the Job: with migrations.secretEnv true (default: true when externalSecret is enabled, false
+otherwise, which is how every chart before it behaved) the Job gets the app's envFrom secrets. The
+ExternalSecret's Secret is not used directly: the Job runs before the release's normal resources, so on a
+fresh install it would not exist yet. A hook copy, <fullname>-migration, is created first (weight 0,
+Argo CD waits for it to be Healthy) and the Job reads that instead.
+*/}}
+{{- $es := .Values.externalSecret | default dict }}
+{{- $useSecrets := hasKey .Values.migrations "secretEnv" | ternary .Values.migrations.secretEnv (and $es.enabled true) }}
+{{- $esCopy := and $useSecrets $es.enabled (ne (toString $es.envFrom) "false") }}
+{{- $migrationSecret := printf "%s-migration" (include "+( .AppName ).fullname" .) }}
+{{- $secretNames := list }}
+{{- if $useSecrets }}
+{{- range (include "+( .AppName ).envFromSecrets" . | fromJsonArray) }}
+{{- if and $esCopy (eq . (include "+( .AppName ).externalSecretName" $)) }}
+{{- $secretNames = append $secretNames $migrationSecret }}
+{{- else }}
+{{- $secretNames = append $secretNames . }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- if $esCopy }}
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: {{ $migrationSecret }}
+  labels:
+    {{- include "+( .AppName ).labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  {{- include "+( .AppName ).externalSecretSpec" (dict "root" . "target" $migrationSecret "hook" true) | nindent 2 }}
+---
+{{- end }}
 {{- if .Values.configFiles.enabled }}
 {{- /*
 The migration Job runs before the release's normal resources (Helm pre-install/pre-upgrade,
@@ -53,6 +89,13 @@ spec:
         {{- end }}
         {{- if .Values.migrations.args }}
         args: {{ toYaml .Values.migrations.args | nindent 10 }}
+        {{- end }}
+        {{- if $secretNames }}
+        envFrom:
+        {{- range $secretNames }}
+        - secretRef:
+            name: {{ . | quote }}
+        {{- end }}
         {{- end }}
         env:
         {{- range $k, $v := .Values.env }}

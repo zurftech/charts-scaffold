@@ -1,0 +1,88 @@
+{{- /*
+worker, off by default. A second Deployment, <fullname>-<worker.name>, for background work that must run
+in one process only (pollers, schedulers, sync loops). It runs the app's pod (image, service account,
+init containers, secrets, probes, volumes, scheduling) with the overrides below, 1 replica and strategy
+Recreate by default, so a rollout stops the old pod before the new one starts and two workers never
+overlap. Its pods carry app.kubernetes.io/component: <worker.name>, so it needs .Values.component set:
+the app's Deployment, Service and PodDisruptionBudget then select only their own component and never the
+worker. No HPA.
+
+Overrides (each optional):
+  replicas, strategy, entrypoint (command / args), resources, livenessProbe, readinessProbe,
+  startupProbe: replace the app's value.
+  env, podAnnotations: merged over the app's, key by key; the worker's value wins.
+  configFiles.files: merged over the app's configFiles.files; a map file is merged top-level key by
+  top-level key (fits flat dotted config files), a string file is replaced. When set, the worker mounts
+  its own ConfigMap <fullname>-<worker.name>; otherwise it mounts the app's.
+*/ -}}
+{{- $w := .Values.worker | default dict }}
+{{- if $w.enabled }}
+{{- if not .Values.component }}
+{{- fail "worker.enabled needs component (for example api): without it the app's Deployment and Service select the worker pods too" }}
+{{- end }}
+{{- $wname := $w.name | default "worker" }}
+{{- if eq $wname (toString .Values.component) }}
+{{- fail "worker.name must differ from component" }}
+{{- end }}
+{{- /* Shorten the app's fullname, not the suffix, so the worker never gets the app's own name. */}}
+{{- $base := include "+( .AppName ).fullname" . | trunc (int (sub 62 (len $wname))) | trimSuffix "-" }}
+{{- $fullname := printf "%s-%s" $base $wname }}
+{{- $vals := deepCopy .Values }}
+{{- $_ := set $vals "replicaCount" (hasKey $w "replicas" | ternary $w.replicas 1) }}
+{{- $_ := set $vals "autoscaling" (dict "enabled" false) }}
+{{- $_ := set $vals "strategy" ($w.strategy | default (dict "type" "Recreate")) }}
+{{- with $w.entrypoint }}
+{{- $_ := set $vals "entrypoint" . }}
+{{- end }}
+{{- range $k := list "resources" "livenessProbe" "readinessProbe" "startupProbe" }}
+{{- if hasKey $w $k }}
+{{- $_ := set $vals $k (index $w $k) }}
+{{- end }}
+{{- end }}
+{{- range $k := list "env" "podAnnotations" }}
+{{- $merged := deepCopy (index $.Values $k | default dict) }}
+{{- range $key, $val := (index $w $k | default dict) }}
+{{- $_ := set $merged $key $val }}
+{{- end }}
+{{- $_ := set $vals $k $merged }}
+{{- end }}
+{{- $configMap := include "+( .AppName ).fullname" . }}
+{{- $checksum := "" }}
+{{- $wfiles := ($w.configFiles | default dict).files | default dict }}
+{{- if and $wfiles (not .Values.configFiles.enabled) }}
+{{- fail "worker.configFiles.files needs configFiles.enabled: the worker's files are merged over the app's" }}
+{{- end }}
+{{- if .Values.configFiles.enabled }}
+{{- $checksum = include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+{{- if $wfiles }}
+{{- $files := deepCopy (.Values.configFiles.files | default dict) }}
+{{- range $file, $content := $wfiles }}
+{{- $base := index $files $file }}
+{{- if and (kindIs "map" $base) (kindIs "map" $content) }}
+{{- range $key, $val := $content }}
+{{- $_ := set $base $key $val }}
+{{- end }}
+{{- else }}
+{{- $_ := set $files $file $content }}
+{{- end }}
+{{- end }}
+{{- $_ := set $vals.configFiles "files" $files }}
+{{- $configMap = $fullname }}
+{{- $data := include "+( .AppName ).configFilesData" (dict "Values" $vals) }}
+{{- $checksum = $data | sha256sum }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $fullname }}
+  labels:
+    {{- include "+( .AppName ).labelsNoComponent" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $wname }}
+data:
+  {{- $data | nindent 2 }}
+---
+{{- end }}
+{{- end }}
+{{- $selector := printf "app.kubernetes.io/name: %s\napp.kubernetes.io/instance: %s\napp.kubernetes.io/component: %s" (include "+( .AppName ).name" .) .Release.Name $wname }}
+{{- $labels := printf "%s\napp.kubernetes.io/component: %s" (include "+( .AppName ).labelsNoComponent" .) $wname }}
+{{- include "+( .AppName ).deployment" (dict "root" . "vals" $vals "name" $fullname "labels" $labels "selector" $selector "configMap" $configMap "checksum" $checksum) }}
+{{- end }}

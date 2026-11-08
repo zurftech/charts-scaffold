@@ -1,12 +1,11 @@
 {{- /*
 CronJobs, off by default: nothing renders unless .Values.cronJobs lists at least one entry, so existing charts are
 unchanged. Each entry runs the app image (or entry.image) with the pod settings of the Deployment: service
-account, pull secrets, pod / container security context, secretEnv, env (entry.env wins per key), configFiles and
+account, pull secrets, pod / container security context, secretEnv / externalSecret, env (entry.env wins per key), configFiles and
 persistence mounts, nodeSelector, affinity, tolerations. Pods carry the job labels, never the Deployment's
 selector labels, so the Service never routes traffic to a job pod.
 */ -}}
 {{- range $job := .Values.cronJobs }}
-{{- $envConfig := $.Values.secretEnv | default dict }}
 {{- $env := merge (deepCopy ($job.env | default dict)) (deepCopy ($.Values.env | default dict)) }}
 ---
 apiVersion: batch/v1
@@ -14,7 +13,7 @@ kind: CronJob
 metadata:
   name: {{ printf "%s-%s" (include "+( .AppName ).fullname" $) $job.name | trunc 52 | trimSuffix "-" }}
   labels:
-    {{- include "+( .AppName ).labels" $ | nindent 4 }}
+    {{- include "+( .AppName ).labelsNoComponent" $ | nindent 4 }}
     app.kubernetes.io/component: {{ $job.name | quote }}
 spec:
   schedule: {{ required "cronJobs[].schedule is required" $job.schedule | quote }}
@@ -61,10 +60,13 @@ spec:
                 {{- toYaml $.Values.securityContext | nindent 16 }}
               image: "{{ $job.image | default (printf "%s:%s" $.Values.image.repository ($.Values.image.tag | default $.Chart.AppVersion)) }}"
               imagePullPolicy: {{ $.Values.image.pullPolicy }}
-              {{- if $envConfig.enabled | default false }}
+              {{- $secretNames := include "+( .AppName ).envFromSecrets" $ | fromJsonArray }}
+              {{- if $secretNames }}
               envFrom:
+              {{- range $secretNames }}
               - secretRef:
-                  name: {{ $envConfig.secretName | quote }}
+                  name: {{ . | quote }}
+              {{- end }}
               {{- end }}
               {{- with $job.command }}
               command:

@@ -69,6 +69,9 @@ Selector labels
 {{- define "+( .AppName ).selectorLabels" -}}
 app.kubernetes.io/name: {{ include "+( .AppName ).name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
+{{- with .Values.component }}
+app.kubernetes.io/component: {{ . }}
+{{- end }}
 {{- end }}
 
 {{/*
@@ -117,5 +120,105 @@ securityContext:
 {{- with .resources }}
 resources:
   {{- toYaml . | nindent 2 }}
+{{- end }}
+{{- end }}
+
+{{/*
+Common labels without app.kubernetes.io/component, for objects that set their own component (CronJobs,
+the worker). Equal to labels while component is unset.
+*/}}
+{{- define "+( .AppName ).labelsNoComponent" -}}
+helm.sh/chart: {{ include "+( .AppName ).chart" . }}
+{{ include "+( .AppName ).appSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+The app's Deployment pods regardless of component (the app and the worker): the NetworkPolicy's selector.
+CronJob and migration pods carry the job labels (<chart>-jobs) and are not selected.
+*/}}
+{{- define "+( .AppName ).appSelectorLabels" -}}
+app.kubernetes.io/name: {{ include "+( .AppName ).name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Name of the ExternalSecret and of the Secret it writes. Default: the fullname.
+*/}}
+{{- define "+( .AppName ).externalSecretName" -}}
+{{- (.Values.externalSecret | default dict).name | default (include "+( .AppName ).fullname" .) }}
+{{- end }}
+
+{{/*
+Secrets passed to the app containers with envFrom, as a JSON list: secretEnv.secretName (when
+secretEnv.enabled), then the ExternalSecret's Secret (when externalSecret.enabled, unless
+externalSecret.envFrom is false). Deployment, worker and CronJobs read it.
+*/}}
+{{- define "+( .AppName ).envFromSecrets" -}}
+{{- $names := list }}
+{{- $envConfig := .Values.secretEnv | default dict }}
+{{- if $envConfig.enabled | default false }}
+{{- $names = append $names $envConfig.secretName }}
+{{- end }}
+{{- $es := .Values.externalSecret | default dict }}
+{{- if and $es.enabled (ne (toString $es.envFrom) "false") }}
+{{- $esName := include "+( .AppName ).externalSecretName" . }}
+{{- if not (has $esName $names) }}
+{{- $names = append $names $esName }}
+{{- end }}
+{{- end }}
+{{- toJson $names }}
+{{- end }}
+
+{{/*
+The spec of the app's ExternalSecret. externalsecret.yaml renders it for the app; hook-migration.yaml
+renders a hook copy for the migration Job. Called with a dict: root, target (the Secret to write), hook
+(true for the hook copy: always creationPolicy Owner and no deletionPolicy, so the copy always writes its
+own Secret whatever the app's ExternalSecret is set to).
+*/}}
+{{- define "+( .AppName ).externalSecretSpec" -}}
+{{- $es := .root.Values.externalSecret }}
+{{- if not $es.storeName }}
+{{- fail "externalSecret.storeName is required: the ClusterSecretStore (or SecretStore) to read from" }}
+{{- end }}
+{{- if not (or $es.remoteKey $es.data) }}
+{{- fail "externalSecret needs remoteKey (a Secrets Manager secret) or data" }}
+{{- end }}
+{{- if and $es.keys (not $es.remoteKey) }}
+{{- fail "externalSecret.keys needs externalSecret.remoteKey" }}
+{{- end }}
+refreshInterval: {{ $es.refreshInterval | default "1h" }}
+secretStoreRef:
+  kind: {{ $es.storeKind | default "ClusterSecretStore" }}
+  name: {{ $es.storeName }}
+target:
+  name: {{ .target }}
+  {{- if .hook }}
+  creationPolicy: Owner
+  {{- else }}
+  creationPolicy: {{ $es.creationPolicy | default "Owner" }}
+  {{- with $es.deletionPolicy }}
+  deletionPolicy: {{ . }}
+  {{- end }}
+  {{- end }}
+{{- if and $es.remoteKey (not $es.keys) }}
+dataFrom:
+  - extract:
+      key: {{ $es.remoteKey | quote }}
+{{- end }}
+{{- if or $es.keys $es.data }}
+data:
+  {{- range $es.keys }}
+  - secretKey: {{ . | quote }}
+    remoteRef:
+      key: {{ $es.remoteKey | quote }}
+      property: {{ . | quote }}
+  {{- end }}
+  {{- with $es.data }}
+  {{- toYaml . | nindent 2 }}
+  {{- end }}
 {{- end }}
 {{- end }}

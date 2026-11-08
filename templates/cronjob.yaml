@@ -13,7 +13,7 @@ kind: CronJob
 metadata:
   name: {{ printf "%s-%s" (include "+( .AppName ).fullname" $) $job.name | trunc 52 | trimSuffix "-" }}
   labels:
-    {{- include "+( .AppName ).labels" $ | nindent 4 }}
+    {{- include "+( .AppName ).labelsNoComponent" $ | nindent 4 }}
     app.kubernetes.io/component: {{ $job.name | quote }}
 spec:
   schedule: {{ required "cronJobs[].schedule is required" $job.schedule | quote }}

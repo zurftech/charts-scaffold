@@ -124,7 +124,21 @@ resources:
 {{- end }}
 
 {{/*
-The app's pods regardless of component: the selector of the NetworkPolicy, which covers the worker too.
+Common labels without app.kubernetes.io/component, for objects that set their own component (CronJobs,
+the worker). Equal to labels while component is unset.
+*/}}
+{{- define "+( .AppName ).labelsNoComponent" -}}
+helm.sh/chart: {{ include "+( .AppName ).chart" . }}
+{{ include "+( .AppName ).appSelectorLabels" . }}
+{{- if .Chart.AppVersion }}
+app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- end }}
+
+{{/*
+The app's Deployment pods regardless of component (the app and the worker): the NetworkPolicy's selector.
+CronJob and migration pods carry the job labels (<chart>-jobs) and are not selected.
 */}}
 {{- define "+( .AppName ).appSelectorLabels" -}}
 app.kubernetes.io/name: {{ include "+( .AppName ).name" . }}
@@ -161,7 +175,9 @@ externalSecret.envFrom is false). Deployment, worker and CronJobs read it.
 
 {{/*
 The spec of the app's ExternalSecret. externalsecret.yaml renders it for the app; hook-migration.yaml
-renders a hook copy for the migration Job. Called with a dict: root, target (the Secret to write).
+renders a hook copy for the migration Job. Called with a dict: root, target (the Secret to write), hook
+(true for the hook copy: always creationPolicy Owner and no deletionPolicy, so the copy always writes its
+own Secret whatever the app's ExternalSecret is set to).
 */}}
 {{- define "+( .AppName ).externalSecretSpec" -}}
 {{- $es := .root.Values.externalSecret }}
@@ -180,9 +196,13 @@ secretStoreRef:
   name: {{ $es.storeName }}
 target:
   name: {{ .target }}
+  {{- if .hook }}
+  creationPolicy: Owner
+  {{- else }}
   creationPolicy: {{ $es.creationPolicy | default "Owner" }}
   {{- with $es.deletionPolicy }}
   deletionPolicy: {{ . }}
+  {{- end }}
   {{- end }}
 {{- if and $es.remoteKey (not $es.keys) }}
 dataFrom:

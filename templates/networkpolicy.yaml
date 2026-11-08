@@ -1,6 +1,6 @@
 {{- /*
-networkPolicy, off by default. Selects every pod of the app (worker included) and allows only the
-ingress / egress rules given, written as in a NetworkPolicy spec (rendered with tpl). policyTypes
+networkPolicy, off by default. Selects the pods of the app's Deployments (the worker included; not CronJob
+or migration pods, which carry the job labels) and allows only the ingress / egress rules given, written as in a NetworkPolicy spec (rendered with tpl). policyTypes
 defaults to Ingress, plus Egress when egress rules are given.
 */ -}}
 {{- $np := .Values.networkPolicy | default dict }}

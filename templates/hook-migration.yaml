@@ -32,7 +32,7 @@ metadata:
     "helm.sh/hook-weight": "0"
     "helm.sh/hook-delete-policy": before-hook-creation
 spec:
-  {{- include "+( .AppName ).externalSecretSpec" (dict "root" . "target" $migrationSecret) | nindent 2 }}
+  {{- include "+( .AppName ).externalSecretSpec" (dict "root" . "target" $migrationSecret "hook" true) | nindent 2 }}
 ---
 {{- end }}
 {{- if .Values.configFiles.enabled }}

@@ -117,15 +117,22 @@ externalSecret:
   # envFrom: false                         # create the Secret without passing it as envFrom
 ```
 
-The pods carry a `checksum/externalsecret` annotation, so adding or removing a key rolls them. Value changes in
-Secrets Manager do not: use Reloader (`deployAnnotations: {secret.reloader.stakater.com/reload: <name>}`).
+The pods carry a `checksum/externalsecret` annotation: a change to the ExternalSecret in values (store, `remoteKey`,
+`keys`, `data`) rolls them. Nothing in Secrets Manager does (a new value, or a new key under a `remoteKey`-only
+extract): use Reloader (`deployAnnotations: {secret.reloader.stakater.com/reload: <name>}`). The ExternalSecret
+and the Deployment apply in the same Argo CD wave, so pods rolled by a values change can start before the
+external-secrets operator has rewritten the Secret; Reloader rolls them again when it does. To order them, give the
+ExternalSecret an earlier wave: `externalSecret.annotations: {argocd.argoproj.io/sync-wave: "-1"}` (the sync then
+also waits for the ExternalSecret to be Ready). The ExternalSecret must not write the Secret `secretEnv.secretName`
+names; the chart refuses to render that.
 
 **Migration Job.** It runs before the release's normal resources (Helm pre-install / pre-upgrade, Argo CD PreSync),
 so on a fresh install the ExternalSecret's Secret does not exist yet. With `externalSecret` on, the chart renders a
 hook copy, ExternalSecret `<fullname>-migration` (weight 0; Argo CD waits for it to be Healthy), and the Job (weight
 5) reads that Secret. `migrations.secretEnv` controls whether the Job gets the app's secrets at all: default true
 when `externalSecret` is on, false otherwise, which is how every earlier chart behaved (`secretEnv` alone never
-reached the Job). Set `migrations.secretEnv: true` to pass `secretEnv` to the Job too.
+reached the Job). Set `migrations.secretEnv: true` to pass `secretEnv` to the Job too. The hook copy always uses
+`creationPolicy: Owner` and no `deletionPolicy`, whatever the app's ExternalSecret sets.
 
 ## worker
 
@@ -137,8 +144,11 @@ pod before the new one starts and two workers never overlap. No HPA.
 It needs `component` set (for example `api`): the app's Deployment, Service and PodDisruptionBudget then select
 `app.kubernetes.io/component: api` and the worker pods carry `app.kubernetes.io/component: worker`, so no Service
 routes to the worker and the two Deployments' selectors never overlap. The chart fails to render otherwise.
-Setting `component` on a live app changes its Deployment's selector, which Kubernetes refuses in place: plan it as a
-re-create, or set it from the start.
+
+**Setting or changing `component` on a live app is an outage unless planned.** The Service and PDB selectors
+change in place, but the Deployment's selector is immutable, so its update fails: the Service then selects no pods
+until the Deployment is re-created, and self-heal keeps retrying. Set it from the start, or re-create the
+Deployment in the same change (delete it by hand, or sync with Argo CD's `Replace=true`) and accept the gap.
 
 ```yaml
 component: api
@@ -154,7 +164,9 @@ worker:
 
 With `worker.configFiles.files` set, the worker mounts its own ConfigMap `<fullname>-<worker.name>`: the app's files
 with the worker's merged in (a map file top-level key by key, which fits flat dotted config files; a string file is
-replaced). Otherwise it mounts the app's ConfigMap.
+replaced). That needs `configFiles.enabled`; the chart refuses to render otherwise. Without it the worker mounts the
+app's ConfigMap. A long fullname is shortened before `-<worker.name>` is appended, so the worker never takes the
+app's name.
 
 ## Pod and Deployment settings
 
@@ -168,10 +180,10 @@ All off or empty by default, passed through as written:
 | `automountServiceAccountToken`, `enableServiceLinks`, `terminationGracePeriodSeconds` | the pod fields, when set |
 | `lifecycle` | the app container's lifecycle (e.g. a `preStop` sleep) |
 | `topologySpreadConstraints` | the pod field, rendered with `tpl` |
-| `initContainers` | init containers, rendered with `tpl`, so `image: '{{ .Values.image.repository }}:{{ .Values.image.tag \| default .Chart.AppVersion }}'` runs the app image |
+| `initContainers` | init containers, rendered with `tpl`, so `image: '{{ .Values.image.repository }}:{{ .Values.image.tag \| default .Chart.AppVersion }}'` runs the app image. A literal `{{` (a Go template in a command, say) must be escaped as `{{ "{{" }}` here and in every other `tpl` value |
 | `extraVolumes`, `extraVolumeMounts` | pod volumes (`tpl`) and app container mounts, e.g. an `emptyDir` an init container fills. The `configFiles` volume is named `configfiles`, so an init container can mount it too |
-| `podDisruptionBudget` | a `policy/v1` PDB over the app's selector: `minAvailable` (default 1) or `maxUnavailable`, `unhealthyPodEvictionPolicy` |
-| `networkPolicy` | a NetworkPolicy over every pod of the app (worker included) with the `ingress` / `egress` rules as written (`tpl`); `policyTypes` default Ingress, plus Egress when egress rules are set |
+| `podDisruptionBudget` | a `policy/v1` PDB over the app's selector: `maxUnavailable` (default 1) or `minAvailable` (with one replica, `minAvailable: 1` blocks every node drain), `unhealthyPodEvictionPolicy` |
+| `networkPolicy` | a NetworkPolicy over the pods of the app's Deployments (worker included; CronJob and migration pods carry the job labels and are not selected) with the `ingress` / `egress` rules as written (`tpl`); `policyTypes` default Ingress, plus Egress when egress rules are set |
 
 Kong upstream timeouts go on the Service with `service.annotations` (e.g. `konghq.com/read-timeout`) and IRSA on
 the ServiceAccount with `serviceAccount.annotations`; both existed before.

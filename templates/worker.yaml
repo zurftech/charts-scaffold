@@ -24,7 +24,9 @@ Overrides (each optional):
 {{- if eq $wname (toString .Values.component) }}
 {{- fail "worker.name must differ from component" }}
 {{- end }}
-{{- $fullname := printf "%s-%s" (include "+( .AppName ).fullname" .) $wname | trunc 63 | trimSuffix "-" }}
+{{- /* Shorten the app's fullname, not the suffix, so the worker never gets the app's own name. */}}
+{{- $base := include "+( .AppName ).fullname" . | trunc (int (sub 62 (len $wname))) | trimSuffix "-" }}
+{{- $fullname := printf "%s-%s" $base $wname }}
 {{- $vals := deepCopy .Values }}
 {{- $_ := set $vals "replicaCount" (hasKey $w "replicas" | ternary $w.replicas 1) }}
 {{- $_ := set $vals "autoscaling" (dict "enabled" false) }}
@@ -47,6 +49,9 @@ Overrides (each optional):
 {{- $configMap := include "+( .AppName ).fullname" . }}
 {{- $checksum := "" }}
 {{- $wfiles := ($w.configFiles | default dict).files | default dict }}
+{{- if and $wfiles (not .Values.configFiles.enabled) }}
+{{- fail "worker.configFiles.files needs configFiles.enabled: the worker's files are merged over the app's" }}
+{{- end }}
 {{- if .Values.configFiles.enabled }}
 {{- $checksum = include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
 {{- if $wfiles }}
@@ -70,17 +75,14 @@ kind: ConfigMap
 metadata:
   name: {{ $fullname }}
   labels:
-    {{- include "+( .AppName ).labels" . | nindent 4 }}
+    {{- include "+( .AppName ).labelsNoComponent" . | nindent 4 }}
+    app.kubernetes.io/component: {{ $wname }}
 data:
   {{- $data | nindent 2 }}
 ---
 {{- end }}
 {{- end }}
 {{- $selector := printf "app.kubernetes.io/name: %s\napp.kubernetes.io/instance: %s\napp.kubernetes.io/component: %s" (include "+( .AppName ).name" .) .Release.Name $wname }}
-{{- $labels := printf "helm.sh/chart: %s\n%s" (include "+( .AppName ).chart" .) $selector }}
-{{- if .Chart.AppVersion }}
-{{- $labels = printf "%s\napp.kubernetes.io/version: %s" $labels (.Chart.AppVersion | quote) }}
-{{- end }}
-{{- $labels = printf "%s\napp.kubernetes.io/managed-by: %s" $labels .Release.Service }}
+{{- $labels := printf "%s\napp.kubernetes.io/component: %s" (include "+( .AppName ).labelsNoComponent" .) $wname }}
 {{- include "+( .AppName ).deployment" (dict "root" . "vals" $vals "name" $fullname "labels" $labels "selector" $selector "configMap" $configMap "checksum" $checksum) }}
 {{- end }}

@@ -236,8 +236,8 @@ worker:
 
 podDisruptionBudget:
   enabled: false
-  # minAvailable: 1
-  # maxUnavailable: 1
+  # maxUnavailable: 1                 # the default when neither is set
+  # minAvailable: 1                   # with replicaCount 1 this blocks every node drain
   # unhealthyPodEvictionPolicy: AlwaysAllow
 
 networkPolicy:
